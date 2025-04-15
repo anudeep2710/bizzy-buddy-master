@@ -68,3 +68,7 @@ data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Embedded repositories
+bizzy-api/
+bizzybuddy-backend/
