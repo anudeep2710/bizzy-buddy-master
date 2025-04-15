@@ -9,6 +9,8 @@ import '../../app/theme/app_theme.dart';
 import '../../controllers/dashboard_controller.dart';
 import '../../models/product.dart';
 import '../../models/sale.dart';
+import '../../providers/video_call_provider.dart';
+import '../../views/call/call_screen.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -113,6 +115,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.video_call),
+            onPressed: () => _initiateVideoCall(),
+            tooltip: 'Start Video Call',
+          ),
           IconButton(
             icon: const Icon(Icons.people),
             onPressed: () => context.push('/settings/employees'),
@@ -453,7 +460,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
       for (var sale in sales) {
         try {
-          if (sale.quantity == null) continue;
           productSales[sale.productId] =
               (productSales[sale.productId] ?? 0) + sale.quantity;
         } catch (e) {
@@ -1114,9 +1120,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     for (var sale in sales) {
       try {
-        if (sale.totalAmount == null) continue;
-
-        // Find the product
         Product? product;
         try {
           product = products.firstWhere(
@@ -1275,6 +1278,50 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _initiateVideoCall() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final videoProvider = ref.read(videoCallProvider);
+
+      debugPrint('Initializing video provider...');
+      await videoProvider.initialize();
+
+      debugPrint('Creating call...');
+      final call = await videoProvider.createCall();
+
+      debugPrint('Call created successfully, navigating to call screen');
+
+      if (!mounted) return;
+
+      // Directly join the call
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CallScreen(call: call),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error creating call: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error creating call: $e'),
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: _initiateVideoCall,
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 }
 

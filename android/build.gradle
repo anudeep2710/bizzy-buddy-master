@@ -8,6 +8,15 @@ allprojects {
 rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
+    
+    // Add Java toolchains configuration for Java 23
+    plugins.withType(JavaPlugin).configureEach {
+        java {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(23)
+            }
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")

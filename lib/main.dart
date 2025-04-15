@@ -9,7 +9,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'app/routes/app_router.dart';
 import 'app/theme/app_theme.dart';
 import 'app/providers/theme_provider.dart';
-import 'models/app_language.dart';
 import 'models/employee.dart';
 import 'models/expense.dart';
 import 'models/product.dart';
@@ -17,6 +16,7 @@ import 'models/sale.dart';
 import 'models/sustainability.dart';
 import 'models/chat_message.dart';
 import 'models/market_price.dart';
+import 'providers/video_call_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,7 +61,6 @@ void main() async {
   Hive.registerAdapter(CarbonFootprintAdapter());
   Hive.registerAdapter(LocalSupplierAdapter());
   Hive.registerAdapter(ChatMessageAdapter());
-  Hive.registerAdapter(AppLanguageAdapter());
   Hive.registerAdapter(MarketPriceAdapter());
 
   // Open Hive boxes
@@ -74,20 +73,14 @@ void main() async {
   await Hive.openBox<LocalSupplier>('local_suppliers');
   await Hive.openBox<ChatMessage>('chat_messages');
   await Hive.openBox<MarketPrice>('market_prices');
-  final languageBox = await Hive.openBox<AppLanguage>('languages');
   await Hive.openBox('settings');
   await Hive.openBox('dashboard_state');
 
   // Initialize default language if needed
-  if (languageBox.isEmpty) {
-    await languageBox.put(
-        'en',
-        AppLanguage(
-          code: 'en',
-          name: 'English',
-          isSelected: true,
-        ));
-  }
+
+  // Initialize Stream Video SDK
+  final videoProvider = VideoCallProvider();
+  await videoProvider.initialize();
 
   runApp(
     const ProviderScope(

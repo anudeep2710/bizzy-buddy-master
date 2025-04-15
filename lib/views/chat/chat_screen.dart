@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../models/chat_message.dart';
 import '../../services/gemini_service.dart';
-import '../../app/providers/language_provider.dart';
 
 final geminiServiceProvider = Provider((ref) => GeminiService());
 final chatBoxProvider = FutureProvider<Box<ChatMessage>>((ref) async {
@@ -67,16 +66,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         '• General business queries\n\n'
         'How can I assist you today?';
 
-    final selectedLanguage = ref.read(selectedLanguageProvider);
-    if (selectedLanguage.code != 'en') {
-      final translatedText =
-          await ref.read(translationProvider(welcomeText).future);
-      final welcomeMessage = ChatMessage.bot(translatedText);
-      _chatBox!.add(welcomeMessage);
-    } else {
-      final welcomeMessage = ChatMessage.bot(welcomeText);
-      _chatBox!.add(welcomeMessage);
-    }
+    final welcomeMessage = ChatMessage.bot(welcomeText);
+    _chatBox!.add(welcomeMessage);
   }
 
   @override
@@ -105,14 +96,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     try {
       final response =
           await ref.read(geminiServiceProvider).sendMessage(message);
-      final selectedLanguage = ref.read(selectedLanguageProvider);
-
-      String finalResponse = response;
-      if (selectedLanguage.code != 'en') {
-        finalResponse = await ref.read(translationProvider(response).future);
-      }
-
-      final botMessage = ChatMessage.bot(finalResponse);
+      final botMessage = ChatMessage.bot(response);
       _chatBox!.add(botMessage);
     } catch (e) {
       final errorMessage =
@@ -181,6 +165,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Chat with Bizzy Bot'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Clear chat history',
+            onPressed: () async {
+              await _chatBox?.clear();
+              _addWelcomeMessage();
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(

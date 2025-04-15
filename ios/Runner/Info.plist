@@ -25,7 +25,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>We need access to your microphone for voice input when adding products</string>
+	<string>$(PRODUCT_NAME) Microphone Usage for video calls</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>We need access to speech recognition to convert your voice input into text</string>
 	<key>UILaunchStoryboardName</key>
@@ -49,5 +49,34 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>$(PRODUCT_NAME) Camera Usage for video calls</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>fetch</string>
+		<string>processing</string>
+		<string>remote-notification</string>
+		<string>voip</string>
+	</array>
+	<!-- Deep linking configuration -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.example.bizzybuddy</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>bizzybuddy</string>
+			</array>
+		</dict>
+	</array>
+	<!-- Universal Links configuration (optional for web links) -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:bizzybuddy.com</string>
+	</array>
 </dict>
 </plist>

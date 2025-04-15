@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:stream_video_flutter/stream_video_flutter.dart' as stream_video;
 
 import '../../views/dashboard/dashboard_screen.dart';
 import '../../views/products/products_screen.dart';
@@ -12,8 +13,16 @@ import '../../views/poster_editor_screen.dart';
 import '../../views/analytics/analytics_screen.dart';
 import '../../views/sustainability_view.dart';
 import '../../views/chat/chat_screen.dart';
+import '../../views/call/call_screen.dart';
 import '../../views/employees/employees_screen.dart';
-import '../../views/test_translation_screen.dart';
+import '../../providers/video_call_provider.dart';
+import '../../views/call/video_call_test_screen.dart';
+import '../../views/auth/auth_screen.dart';
+import '../../views/auth/login_screen.dart';
+import '../../views/auth/register_screen.dart';
+import '../../views/call/test_call_screen.dart';
+import '../../views/call/audio_room_home.dart';
+import '../../views/call/audio_room_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -24,12 +33,68 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SplashScreen(),
       ),
       GoRoute(
+        path: '/auth',
+        builder: (context, state) => const AuthScreen(),
+      ),
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
         path: '/walkthrough',
         builder: (context, state) => const WalkthroughScreen(),
       ),
+      // GoRoute(
+      //   path: '/test-translation',
+      //   name: 'testTranslation',
+      //   builder: (context, state) => const TestTranslationScreen(),
+      // ),
       GoRoute(
-        path: '/test-translation',
-        builder: (context, state) => const TestTranslationScreen(),
+        path: '/video-call-test',
+        builder: (context, state) => const VideoCallTestScreen(),
+      ),
+      GoRoute(
+        path: '/test-call',
+        builder: (context, state) => const TestCallScreen(),
+      ),
+      GoRoute(
+        path: '/join-call/:callId',
+        builder: (context, state) {
+          final callId = state.pathParameters['callId']!;
+          final videoProvider = ref.read(videoCallProvider);
+
+          // Initialize video provider and create call
+          return FutureBuilder(
+            future: () async {
+              await videoProvider.initialize();
+              final call = await videoProvider.joinCallById(callId);
+              return call;
+            }(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return Scaffold(
+                  body: Center(
+                    child: Text('Error joining call: ${snapshot.error}'),
+                  ),
+                );
+              }
+
+              return CallScreen(call: snapshot.data!);
+            },
+          );
+        },
       ),
       ShellRoute(
         builder: (context, state, child) {
@@ -177,6 +242,64 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/call',
+        builder: (context, state) {
+          final call = state.extra as stream_video.Call;
+          return CallScreen(call: call);
+        },
+      ),
+      GoRoute(
+        path: '/audio-rooms',
+        name: 'audioRooms',
+        builder: (context, state) => const AudioRoomHome(),
+      ),
+      GoRoute(
+        path: '/audio-rooms/:roomId',
+        name: 'audioRoomJoin',
+        builder: (context, state) {
+          final roomId = state.pathParameters['roomId']!;
+          return FutureBuilder(
+            future: ref.read(videoCallProvider).initialize().then(
+                  (_) => ref.read(videoCallProvider).joinAudioRoom(roomId),
+                ),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Scaffold(
+                  appBar: AppBar(title: const Text('Joining Audio Room')),
+                  body: const Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return Scaffold(
+                  appBar: AppBar(title: const Text('Error')),
+                  body: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('Failed to join audio room'),
+                        const SizedBox(height: 16),
+                        Text(
+                          snapshot.error.toString(),
+                          style: TextStyle(color: Colors.red.shade700),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => context.pop(),
+                          child: const Text('Go Back'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return AudioRoomScreen(audioRoomCall: snapshot.data!);
+            },
+          );
+        },
       ),
     ],
   );

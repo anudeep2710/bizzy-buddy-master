@@ -698,7 +698,6 @@ class DashboardController {
 
       for (var sale in salesBox.values) {
         try {
-          if (sale.quantity == null) continue;
           productSales[sale.productId] =
               (productSales[sale.productId] ?? 0) + sale.quantity;
         } catch (e) {

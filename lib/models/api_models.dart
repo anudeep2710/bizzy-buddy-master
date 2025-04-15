@@ -123,3 +123,124 @@ class ApiAnalytics {
     );
   }
 }
+
+// Room model for API
+class ApiRoom {
+  final String id;
+  final String roomName;
+  final String host;
+  final List<String> participants;
+  final String? streamCallId;
+  final Map<String, dynamic> settings;
+  final String createdAt;
+  final String updatedAt;
+
+  ApiRoom({
+    required this.id,
+    required this.roomName,
+    required this.host,
+    required this.participants,
+    this.streamCallId,
+    required this.settings,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory ApiRoom.fromJson(Map<String, dynamic> json) {
+    return ApiRoom(
+      id: json['id'] ?? json['_id'] ?? '',
+      roomName: json['roomName'] ?? 'Unnamed Room',
+      host: json['host'] is Map
+          ? json['host']['userId'] ?? ''
+          : json['host'] ?? '',
+      participants: json['participants'] is List
+          ? (json['participants'] as List).map((p) {
+              if (p is Map) {
+                return p['userId']?.toString() ?? '';
+              }
+              return p?.toString() ?? '';
+            }).toList()
+          : [],
+      streamCallId: json['streamCallId'],
+      settings: json['settings'] ?? {'audio': true, 'video': false},
+      createdAt: json['createdAt'] ?? DateTime.now().toIso8601String(),
+      updatedAt: json['updatedAt'] ?? DateTime.now().toIso8601String(),
+    );
+  }
+
+  // Get host name (if host is populated)
+  String? get hostName {
+    if (host is Map) {
+      return (host as Map)['name'];
+    }
+    return null;
+  }
+
+  // Get participants count
+  int get participantCount => participants.length;
+}
+
+// User model for API
+class ApiUser {
+  final String userId;
+  final String name;
+  final String email;
+  final String role;
+  final String token;
+  final String streamToken;
+
+  ApiUser({
+    required this.userId,
+    required this.name,
+    required this.email,
+    required this.role,
+    required this.token,
+    required this.streamToken,
+  });
+
+  factory ApiUser.fromJson(Map<String, dynamic> json) {
+    return ApiUser(
+      userId: json['userId'] ?? '',
+      name: json['name'] ?? '',
+      email: json['email'] ?? '',
+      role: json['role'] ?? 'user',
+      token: json['token'] ?? '',
+      streamToken: json['streamToken'] ?? '',
+    );
+  }
+}
+
+// Call model for API
+class ApiCall {
+  final String callId;
+  final String createdBy;
+  final List<Map<String, dynamic>> participants;
+  final String status;
+  final String startedAt;
+  final String? endedAt;
+  final int? duration;
+
+  ApiCall({
+    required this.callId,
+    required this.createdBy,
+    required this.participants,
+    required this.status,
+    required this.startedAt,
+    this.endedAt,
+    this.duration,
+  });
+
+  factory ApiCall.fromJson(Map<String, dynamic> json) {
+    return ApiCall(
+      callId: json['callId'] ?? '',
+      createdBy: json['createdBy'] ?? '',
+      participants: json['participants'] != null
+          ? List<Map<String, dynamic>>.from(json['participants'])
+          : [],
+      status: json['status'] ?? 'unknown',
+      startedAt: json['startedAt'] ?? DateTime.now().toIso8601String(),
+      endedAt: json['endedAt'],
+      duration: json['duration'],
+    );
+  }
+}

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:open_file/open_file.dart';
-import '../../models/app_language.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:share_plus/share_plus.dart';
+import 'dart:io';
+import 'package:csv/csv.dart';
+import '../../models/product.dart';
 import '../../models/sale.dart';
-import '../../app/providers/language_provider.dart';
-import '../../utils/pdf_export.dart';
-import '../../utils/pdf_translator.dart';
-import 'package:hive/hive.dart';
+import '../../models/expense.dart';
 
 class ExportScreen extends ConsumerStatefulWidget {
   const ExportScreen({super.key});
@@ -16,14 +19,14 @@ class ExportScreen extends ConsumerStatefulWidget {
 }
 
 class _ExportScreenState extends ConsumerState<ExportScreen> {
-  bool _isExporting = false;
-  String? _exportedFilePath;
   String? _error;
+  String? _successMessage;
+  bool _isLoading = false;
+  final DateFormat _dateFormat = DateFormat('yyyy-MM-dd');
+  final String _defaultExportFolder = 'BizzyBuddy/Exports';
 
   @override
   Widget build(BuildContext context) {
-    final currentLanguage = ref.watch(selectedLanguageProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Export Data'),
@@ -33,104 +36,92 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Current Language: ${currentLanguage.name}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Export Format',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            _buildExportOption(
-              icon: Icons.picture_as_pdf,
-              title: 'PDF Report',
-              subtitle: 'Export sales data as a PDF document',
-              onTap: () => _exportAsPdf(currentLanguage),
-            ),
-            const SizedBox(height: 16),
-            _buildExportOption(
-              icon: Icons.table_chart,
-              title: 'Excel Spreadsheet',
-              subtitle: 'Export data as an Excel spreadsheet',
-              onTap: () {
-                // Show dialog to warn user about Excel export issues
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Excel Export Not Available'),
-                    content: const Text(
-                        'Excel export functionality is currently being updated to '
-                        'support the latest version of the Excel package. '
-                        'Please use PDF export instead until this feature is fixed.'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('OK'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-            const Spacer(),
-            if (_isExporting)
-              const Center(
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Exporting data...'),
-                  ],
-                ),
-              )
-            else if (_error != null)
-              Center(
-                child: Column(
-                  children: [
-                    const Icon(Icons.error_outline,
-                        color: Colors.red, size: 48),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Error: $_error',
-                      style: const TextStyle(color: Colors.red),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _error = null;
-                        });
-                      },
-                      child: const Text('Try Again'),
-                    ),
-                  ],
-                ),
-              )
-            else if (_exportedFilePath != null)
-              Center(
-                child: Column(
-                  children: [
-                    const Icon(Icons.check_circle,
-                        color: Colors.green, size: 48),
-                    const SizedBox(height: 16),
                     const Text(
-                      'Export completed successfully!',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'File saved to: $_exportedFilePath',
-                      style: Theme.of(context).textTheme.bodySmall,
-                      textAlign: TextAlign.center,
+                      'Export Options',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: () => _openExportedFile(),
-                      icon: const Icon(Icons.open_in_new),
-                      label: const Text('Open File'),
+                    _buildExportOption(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'Export Products',
+                      description: 'Export your product catalog as CSV',
+                      onTap: () => _exportData('products'),
+                    ),
+                    const Divider(),
+                    _buildExportOption(
+                      icon: Icons.point_of_sale,
+                      title: 'Export Sales',
+                      description: 'Export your sales history as CSV',
+                      onTap: () => _exportData('sales'),
+                    ),
+                    const Divider(),
+                    _buildExportOption(
+                      icon: Icons.receipt_long,
+                      title: 'Export Expenses',
+                      description: 'Export your expense records as CSV',
+                      onTap: () => _exportData('expenses'),
+                    ),
+                    const Divider(),
+                    _buildExportOption(
+                      icon: Icons.download,
+                      title: 'Export All Data',
+                      description: 'Export all business data',
+                      onTap: () => _exportData('all'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : const SizedBox(),
+            if (_error != null)
+              Container(
+                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(top: 8),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_successMessage != null)
+              Container(
+                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(top: 8),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_outline, color: Colors.green),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _successMessage!,
+                        style: const TextStyle(color: Colors.green),
+                      ),
                     ),
                   ],
                 ),
@@ -144,179 +135,173 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
   Widget _buildExportOption({
     required IconData icon,
     required String title,
-    required String subtitle,
+    required String description,
     required VoidCallback onTap,
   }) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Icon(icon, size: 32, color: Theme.of(context).primaryColor),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.arrow_forward_ios, size: 16),
-            ],
-          ),
-        ),
-      ),
+    return ListTile(
+      leading: Icon(icon, size: 28),
+      title: Text(title),
+      subtitle: Text(description),
+      onTap: _isLoading ? null : onTap,
     );
   }
 
-  Future<void> _exportAsPdf(AppLanguage language) async {
-    // Show language selection dialog
-    final selectedLanguage = await _showLanguageSelectionDialog(language);
-    if (selectedLanguage == null) return; // User cancelled
+  Future<void> _exportData(String type) async {
+    if (_isLoading) return;
 
     setState(() {
-      _isExporting = true;
+      _isLoading = true;
       _error = null;
-      _exportedFilePath = null;
+      _successMessage = null;
     });
 
     try {
-      debugPrint(
-          'Exporting PDF in language: ${selectedLanguage.name} (${selectedLanguage.code})');
-
-      // Get the PDF exporter for the selected language
-      final pdfExporter = ref.read(pdfExportProvider(selectedLanguage.code));
-      final pdfTranslator =
-          ref.read(pdfTranslatorProvider(selectedLanguage.code));
-
-      // Test translation to verify it's working
-      final testTranslation = await pdfTranslator.translateText(
-          'Sales Report', selectedLanguage.code);
-      debugPrint('Test translation of "Sales Report": $testTranslation');
-
-      // Get sales data from Hive
-      final salesBox = Hive.box<Sale>('sales');
-      final sales = salesBox.values.toList();
-
-      debugPrint('Found ${sales.length} sales records to export');
-
-      if (sales.isEmpty) {
+      // Request storage permission
+      final status = await Permission.storage.request();
+      if (!status.isGranted) {
         setState(() {
-          _isExporting = false;
-          _error = 'No sales data available to export';
+          _error = 'Storage permission is required for exporting data';
+          _isLoading = false;
         });
         return;
       }
 
-      // Export the data to PDF
-      final file =
-          await pdfExporter.exportSalesData(sales, selectedLanguage.code);
-      debugPrint('PDF saved to: ${file.path}');
-
-      setState(() {
-        _isExporting = false;
-        _exportedFilePath = file.path;
-      });
-
-      // Try to open the PDF
-      try {
-        await _openExportedFile();
-      } catch (e) {
-        debugPrint('Error opening PDF: $e');
-        // We don't want to set error state here as the export was successful
+      // Get app directory for export
+      final directory = await getExternalStorageDirectory();
+      if (directory == null) {
+        setState(() {
+          _error = 'Could not access storage for export';
+          _isLoading = false;
+        });
+        return;
       }
-    } catch (e, stackTrace) {
-      debugPrint('Error exporting PDF: $e');
-      debugPrint('Stack trace: $stackTrace');
 
-      setState(() {
-        _isExporting = false;
-        _error = e.toString();
-      });
+      // Create export directory if it doesn't exist
+      final exportDir = Directory('${directory.path}/$_defaultExportFolder');
+      if (!await exportDir.exists()) {
+        await exportDir.create(recursive: true);
+      }
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      List<File> exportedFiles = [];
+
+      switch (type) {
+        case 'products':
+          final file = await _exportProducts(exportDir, timestamp);
+          exportedFiles.add(file);
+          break;
+        case 'sales':
+          final file = await _exportSales(exportDir, timestamp);
+          exportedFiles.add(file);
+          break;
+        case 'expenses':
+          final file = await _exportExpenses(exportDir, timestamp);
+          exportedFiles.add(file);
+          break;
+        case 'all':
+          exportedFiles.add(await _exportProducts(exportDir, timestamp));
+          exportedFiles.add(await _exportSales(exportDir, timestamp));
+          exportedFiles.add(await _exportExpenses(exportDir, timestamp));
+          break;
+      }
+
+      if (exportedFiles.isEmpty) {
+        throw Exception('No files were exported');
+      }
+
+      // Share the exported files
+      await Share.shareXFiles(
+        exportedFiles.map((file) => XFile(file.path)).toList(),
+        subject: 'BizzyBuddy Exported Data',
+      );
+
+      if (mounted) {
+        setState(() {
+          _successMessage = 'Data exported successfully!';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Export failed: ${e.toString()}';
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  Future<AppLanguage?> _showLanguageSelectionDialog(
-      AppLanguage currentLanguage) async {
-    final supportedLanguagesAsync = ref.watch(supportedLanguagesProvider);
+  Future<File> _exportProducts(Directory dir, int timestamp) async {
+    final productsBox = await Hive.openBox<Product>('products');
+    final products = productsBox.values.toList();
 
-    return supportedLanguagesAsync.when(
-      data: (supportedLanguages) async {
-        return showDialog<AppLanguage>(
-          context: context,
-          builder: (context) {
-            return AlertDialog(
-              title: const Text('Select Export Language'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  shrinkWrap: true,
-                  children: supportedLanguages.entries.map((entry) {
-                    return ListTile(
-                      title: Text(entry.value),
-                      trailing: currentLanguage.code == entry.key
-                          ? const Icon(Icons.check, color: Colors.green)
-                          : null,
-                      onTap: () {
-                        Navigator.of(context).pop(
-                          AppLanguage(
-                            code: entry.key,
-                            name: entry.value,
-                            isSelected: false,
-                          ),
-                        );
-                      },
-                    );
-                  }).toList(),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-      loading: () async {
-        // Show loading dialog and wait for data
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Loading language options...')),
-        );
-        return currentLanguage; // Default to current language while loading
-      },
-      error: (error, stack) async {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading languages: $error')),
-        );
-        return currentLanguage; // Default to current language on error
-      },
-    );
+    final csvData = [
+      ['ID', 'Name', 'Price', 'Quantity', 'Category', 'Created Date'],
+      ...products.map((product) => [
+            product.id,
+            product.name,
+            product.price,
+            product.quantity,
+            product.category,
+            _dateFormat.format(product.createdAt),
+          ]),
+    ];
+
+    final csv = const ListToCsvConverter().convert(csvData);
+    final file = File('${dir.path}/products_$timestamp.csv');
+    await file.writeAsString(csv);
+    return file;
   }
 
-  Future<void> _openExportedFile() async {
-    if (_exportedFilePath != null) {
-      final result = await OpenFile.open(_exportedFilePath);
-      if (result.type != ResultType.done) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error opening file: ${result.message}')),
-          );
-        }
-      }
-    }
+  Future<File> _exportSales(Directory dir, int timestamp) async {
+    final salesBox = await Hive.openBox<Sale>('sales');
+    final sales = salesBox.values.toList();
+
+    final csvData = [
+      [
+        'ID',
+        'Date',
+        'Product ID',
+        'Customer',
+        'Unit Price',
+        'Quantity',
+        'Total Amount'
+      ],
+      ...sales.map((sale) => [
+            sale.id,
+            _dateFormat.format(sale.date),
+            sale.productId,
+            sale.customerName ?? 'N/A',
+            sale.unitPrice,
+            sale.quantity,
+            sale.totalAmount,
+          ]),
+    ];
+
+    final csv = const ListToCsvConverter().convert(csvData);
+    final file = File('${dir.path}/sales_$timestamp.csv');
+    await file.writeAsString(csv);
+    return file;
+  }
+
+  Future<File> _exportExpenses(Directory dir, int timestamp) async {
+    final expensesBox = await Hive.openBox<Expense>('expenses');
+    final expenses = expensesBox.values.toList();
+
+    final csvData = [
+      ['ID', 'Date', 'Category', 'Amount', 'Description'],
+      ...expenses.map((expense) => [
+            expense.id,
+            _dateFormat.format(expense.date),
+            expense.category,
+            expense.amount,
+            expense.description,
+          ]),
+    ];
+
+    final csv = const ListToCsvConverter().convert(csvData);
+    final file = File('${dir.path}/expenses_$timestamp.csv');
+    await file.writeAsString(csv);
+    return file;
   }
 }
